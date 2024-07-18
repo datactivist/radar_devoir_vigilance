@@ -42,6 +42,10 @@ htmltools::img(src = "https://nextcloud.datactivist.coop/s/o53wzfMNnFosQni/previ
 
 # Sélection des données
 
+Comparaison du nombre d'entreprises selon la source : 
+
+- Orbis : 23.795.040 entreprises le 18 juillet 2024 ;
+- Sirene (V3) : 38.833.027 entreprises le 18 juillet 2024 ;
 
 ## Base Sirene
 
@@ -49,11 +53,16 @@ htmltools::img(src = "https://nextcloud.datactivist.coop/s/o53wzfMNnFosQni/previ
 
 Les données de la base Orbis ont été téléchargées le 17 juillet 2024 sur [orbis-r1-bvdinfo-com.acces-distant.sciencespo.fr](https://orbis-r1-bvdinfo-com.acces-distant.sciencespo.fr/version-20240621-3-2/Orbis/1/Companies/List), via un identifiant donnant accès aux données fermées. Les filtres suivants ont été appliqués : 
 
+- **Statut** : *Entreprises actives*, ou en *Situation inconnue*, pour un total de **373.396.812** entreprises ;
 - **Forme juridique** :  *SA - SA (France), SA directoire (France), SCA - SCA (France), Société Anonyme (France), Société européenne (France), Société par actions simplifiée - SAS (France)*, pour un total de **532.075** entreprises ;
-- **Nombre d'employés** : *5.000 et plus* pour les trois dernières années disponibles, pour un total de **7.827** entreprises.
+- **Nombre d'employés** : *5.000 et plus* pour les trois dernières années disponibles (lorsqu'il y a au moins 1 des 3 années disponible), pour un total de **21.588** entreprises (7.827 si on sélectionne les entreprises dont les comptes des 3 dernières années sont tous connus).
 
-Seules 139 entreprises remplissent les deux caractéristiques listées. 
+Seules 265 entreprises remplissent les caractéristiques listées (139 si on sélectionne les entreprises dont les comptes des 3 dernières années sont tous connus). 
 
+```{r}
+library(jsonlite)
+orbis <- fromJSON(txt = "data_orbis.json", flatten = T)
+```
 
 
 ## Titre de niveau 2
