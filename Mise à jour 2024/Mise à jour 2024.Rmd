@@ -47,6 +47,51 @@ Comparaison du nombre d'entreprises selon la source :
 - Orbis : 23.795.040 entreprises le 18 juillet 2024 ;
 - Sirene (V3) : 38.833.027 entreprises le 18 juillet 2024 ;
 
+
+## Base INPI
+
+```{r}
+library(tidyverse)
+library(readxl)
+data_inpi <- read_excel("data/data_inpi.xlsx", skip = 1)
+```
+
+## Base Pappers
+
+
+```{r}
+library(htm2txt)
+library(rvest)
+
+test <- read_html("https://www.pappers.fr/recherche?forme_juridique=5710%2C5599%2C5505%2C5510%2C5515%2C5522%2C5525%2C5530%2C5532%2C5542%2C5543%2C5546%2C5547%2C5548%2C5551%2C5552%2C5553%2C5554%2C5555%2C5558%2C5559%2C5560%2C5605%2C5720%2C5610%2C5615%2C5625%2C5622%2C5642%2C5643%2C5646%2C5648%2C5651%2C5652%2C5653%2C5654%2C5655%2C5660%2C5659%2C5658%2C5699%2C5308%2C5309%2C5800&effectifs_min=5000&effectifs_max=500000") |> 
+    html_nodes('body')  |> html_nodes('table') |> html_table(dec = ",")
+
+test <- gettxt("https://www.pappers.fr/recherche?forme_juridique=5710%2C5599%2C5505%2C5510%2C5515%2C5522%2C5525%2C5530%2C5532%2C5542%2C5543%2C5546%2C5547%2C5548%2C5551%2C5552%2C5553%2C5554%2C5555%2C5558%2C5559%2C5560%2C5605%2C5720%2C5610%2C5615%2C5625%2C5622%2C5642%2C5643%2C5646%2C5648%2C5651%2C5652%2C5653%2C5654%2C5655%2C5660%2C5659%2C5658%2C5699%2C5308%2C5309%2C5800&effectifs_min=5000&effectifs_max=500000") |> #import page par page
+    rename(text = 1) |> 
+    mutate(text = strsplit(as.character(text), "\n")) |> unnest(text) |> #split les éléments séparés par des "\n"
+    filter(row_number() ==  10 | #nom de conférence
+               grepl("Acronym:", text) ==  TRUE | 
+               grepl("Source:", text) ==  TRUE | 
+               grepl("Rank:", text) ==  TRUE, #champs que l'on garde
+           grepl("DBLP", text) ==  FALSE) |> #retrait de la ligne contenant ce string
+    mutate(text = case_when(row_number() ==  1 ~ paste("Title:", text), TRUE ~ text), #ajout du préfixe "titre:"
+           champ = str_extract(text, "^[a-zA-Z0-9_]*"), #dans une nouvelle colonne ce qui est avant ":"
+           value = str_extract(text, "(?< = : )[^\n]*")) |> #dans une nouvelle colonne ce qui est après ": "
+    select(-text) |> t() |> row_to_names(row_number = 1) |> data.frame() |> #transpose puis 1ère ligne en nom de colonnes
+    pivot_longer(cols = -c(Title, Acronym), names_to = "number", values_to = "value", names_prefix = "Source|Rank") |> # format long pour rank et source quand multiples
+    mutate(col = case_when(row_number() %% 2 ==  0 ~ "rank",
+                           row_number() %% 2 ==  1 ~ "source")) |> #
+    pivot_wider(names_from = col, values_from = value) |> 
+    select(-number) |> mutate(core_id = .x)
+
+# Gestion des Na et mise au format tabulaire
+core_histo <- core_millesime[core_millesime !=  "NA"] # replace NA by NULL
+core_histo <- rrapply::rrapply(core_histo, condition = Negate(is.null), how = "prune") #remove NULL
+core_histo <- core_histo |> bind_rows()
+
+```
+
+
 ## Base Sirene
 
 ## Base Orbis
@@ -61,7 +106,7 @@ Seules 265 entreprises remplissent les caractéristiques listées (139 si on sé
 
 ```{r}
 library(jsonlite)
-orbis <- fromJSON(txt = "data_orbis.json", flatten = T)
+orbis <- fromJSON(txt = "data/data_orbis.json", flatten = T)
 ```
 
 
