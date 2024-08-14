@@ -48,51 +48,50 @@ Comparaison du nombre d'entreprises selon la source :
 - Sirene (V3) : 38.833.027 entreprises le 18 juillet 2024 ;
 
 
-## Base INPI
+
+## Base Sirene
+
+Les données de la base SIRENE ont été traitées dans le script *'Pre-run_Sirene.R'*, étant donné le poids des données et pour ne pas ralentir l'exécution de cette page. 
+
+Le 14 août 2024, les unités légales de 5000 à 9999 salariés, et celles de plus de 100000 salariés ont été importées puis rassemblées en une seule base, sur laquelle les filtres et calculs de cette page vont être appliqués.
 
 ```{r}
 library(tidyverse)
 library(readxl)
-data_inpi <- read_excel("data/data_inpi.xlsx", skip = 1)
+
+# Données
+sirene <- read_csv("data/in/entreprises_plus5000-salaries_SIRENE.csv")
+
+
+##--- Filtres
+
+# Filtre sur la forme juridique
+forme_juri <- sirene |> 
+    filter(`Nature juridique de l'unité légale` == "SAS, société par actions simplifiée" | 
+               `Nature juridique de l'unité légale` == "Société européenne" |
+               `Nature juridique de l'unité légale` == "Société en commandite par actions" |
+               grepl("SA", `Nature juridique de l'unité légale`) == TRUE)
+
+# Filtre sur le nombre de salariés
+nb_salaries <- sirene |> 
+    filter(`Tranche de l'effectif de l'unité légale` == "5 000 à 9 999 salariés" | 
+               `Tranche de l'effectif de l'unité légale` == "10 000 salariés et plus" |
+               `Tranche de l'effectif de l'établissement` == "5 000 à 9 999 salariés" | 
+               `Tranche de l'effectif de l'établissement` == "10 000 salariés et plus")
+
+# Deux conditions remplies
+forme_juri_salaries <- intersect(forme_juri, nb_salaries) |> 
+    select(-c(`Tranche de l'effectif de l'établissement triable`, `Tranche de l'effectif de l'unité légale triable`, 
+              `Année de la tranche d'effectif de l'établissement`, 
+              `Année de la tranche de l'effectif de l'unité légale`:`Catégorie juridique de l'unité légale`))
+
+# UNITÉS LÉGALES DDV
+ul_ddv <- forme_juri_salaries |> 
+    mutate(nombre_etablissements = n(), .by = SIREN) |> 
+    distinct(SIREN, `Dénomination de l'unité légale`, `Tranche de l'effectif de l'unité légale`, 
+             `Nature juridique de l'unité légale`, nombre_etablissements)
+rio::export(ul_ddv, "data/out/unites-legales_ddv_SIRENE.csv")
 ```
-
-## Base Pappers
-
-
-```{r}
-library(htm2txt)
-library(rvest)
-
-test <- read_html("https://www.pappers.fr/recherche?forme_juridique=5710%2C5599%2C5505%2C5510%2C5515%2C5522%2C5525%2C5530%2C5532%2C5542%2C5543%2C5546%2C5547%2C5548%2C5551%2C5552%2C5553%2C5554%2C5555%2C5558%2C5559%2C5560%2C5605%2C5720%2C5610%2C5615%2C5625%2C5622%2C5642%2C5643%2C5646%2C5648%2C5651%2C5652%2C5653%2C5654%2C5655%2C5660%2C5659%2C5658%2C5699%2C5308%2C5309%2C5800&effectifs_min=5000&effectifs_max=500000") |> 
-    html_nodes('body')  |> html_nodes('table') |> html_table(dec = ",")
-
-test <- gettxt("https://www.pappers.fr/recherche?forme_juridique=5710%2C5599%2C5505%2C5510%2C5515%2C5522%2C5525%2C5530%2C5532%2C5542%2C5543%2C5546%2C5547%2C5548%2C5551%2C5552%2C5553%2C5554%2C5555%2C5558%2C5559%2C5560%2C5605%2C5720%2C5610%2C5615%2C5625%2C5622%2C5642%2C5643%2C5646%2C5648%2C5651%2C5652%2C5653%2C5654%2C5655%2C5660%2C5659%2C5658%2C5699%2C5308%2C5309%2C5800&effectifs_min=5000&effectifs_max=500000") |> #import page par page
-    rename(text = 1) |> 
-    mutate(text = strsplit(as.character(text), "\n")) |> unnest(text) |> #split les éléments séparés par des "\n"
-    filter(row_number() ==  10 | #nom de conférence
-               grepl("Acronym:", text) ==  TRUE | 
-               grepl("Source:", text) ==  TRUE | 
-               grepl("Rank:", text) ==  TRUE, #champs que l'on garde
-           grepl("DBLP", text) ==  FALSE) |> #retrait de la ligne contenant ce string
-    mutate(text = case_when(row_number() ==  1 ~ paste("Title:", text), TRUE ~ text), #ajout du préfixe "titre:"
-           champ = str_extract(text, "^[a-zA-Z0-9_]*"), #dans une nouvelle colonne ce qui est avant ":"
-           value = str_extract(text, "(?< = : )[^\n]*")) |> #dans une nouvelle colonne ce qui est après ": "
-    select(-text) |> t() |> row_to_names(row_number = 1) |> data.frame() |> #transpose puis 1ère ligne en nom de colonnes
-    pivot_longer(cols = -c(Title, Acronym), names_to = "number", values_to = "value", names_prefix = "Source|Rank") |> # format long pour rank et source quand multiples
-    mutate(col = case_when(row_number() %% 2 ==  0 ~ "rank",
-                           row_number() %% 2 ==  1 ~ "source")) |> #
-    pivot_wider(names_from = col, values_from = value) |> 
-    select(-number) |> mutate(core_id = .x)
-
-# Gestion des Na et mise au format tabulaire
-core_histo <- core_millesime[core_millesime !=  "NA"] # replace NA by NULL
-core_histo <- rrapply::rrapply(core_histo, condition = Negate(is.null), how = "prune") #remove NULL
-core_histo <- core_histo |> bind_rows()
-
-```
-
-
-## Base Sirene
 
 ## Base Orbis
 
@@ -106,59 +105,57 @@ Seules 265 entreprises remplissent les caractéristiques listées (139 si on sé
 
 ```{r}
 library(jsonlite)
-orbis <- fromJSON(txt = "data/data_orbis.json", flatten = T)
+
+# Données
+orbis <- fromJSON(txt = "data/in/data_orbis.json", flatten = T)
+
+
+##--- Filtres
+
+entreprises_ddv_orbis <- orbis |> 
+    filter(`Dernière année disp.` >= 2012) |> 
+    # mise en forme données d'effectifs
+    mutate(`EffectifsDernière année disp.` = str_remove_all(`EffectifsDernière année disp.`, ",|n.d."),
+           `EffectifsDernière année disp.` = as.numeric(na_if(`EffectifsDernière année disp.`, "")),
+           `EffectifsAnnée - 1` = str_remove_all(`EffectifsAnnée - 1`, ",|n.d."),
+           `EffectifsAnnée - 1` = as.numeric(na_if(`EffectifsAnnée - 1`, "")),
+           `EffectifsAnnée - 2` = str_remove_all(`EffectifsAnnée - 2`, ",|n.d."),
+           `EffectifsAnnée - 2` = as.numeric(na_if(`EffectifsAnnée - 2`, ""))) |> 
+    # règle de décision sur les effectifs
+    mutate(derniers_effectifs = coalesce(`EffectifsDernière année disp.`,`EffectifsAnnée - 1`,`EffectifsAnnée - 2`),
+           effectifs_22_23_sup_5000 = case_when(`Dernière année disp.` == 2023 & 
+                                                    `EffectifsDernière année disp.` > 5000 & 
+                                                    `EffectifsAnnée - 1` > 5000 ~ "1",
+                                                .default = "0"),
+           effectifs_last_sup_5000 = ifelse(derniers_effectifs > 5000, "1", "0")) |> 
+    # extraction SIRET
+    mutate(`Code d'identifiant` = strsplit(as.character(`Code d'identifiant`), ";"),
+           `Libellé d'identifiant` = strsplit(as.character(`Libellé d'identifiant`), ";")) |> 
+    unnest(c(`Code d'identifiant`, `Libellé d'identifiant`)) |> 
+    filter(`Libellé d'identifiant` == "SIREN number" | `Libellé d'identifiant` == "SIRET number") |>
+    arrange(desc(`Libellé d'identifiant`)) |> 
+    slice(1, .by = `Nom de l'entreprise Latin alphabet`) |> 
+    mutate(SIREN = substr(`Code d'identifiant`, 1, 9))
+
+table(entreprises_ddv_orbis$effectifs_22_23_sup_5000)
+table(entreprises_ddv_orbis$effectifs_last_sup_5000)
+
+# Entreprises non concernées par le DDV
+entreprises_non_ddv <- entreprises_ddv_orbis |> 
+    filter(effectifs_22_23_sup_5000 == "0" & effectifs_last_sup_5000 == "0")
+```
+
+## Liste des entreprises soumises au devoir de vigilance
+
+```{r}
+# Entreprises communes aux bases Sirene et Orbis
+ddv_sirene_orbis <- inner_join(ul_ddv, entreprises_ddv_orbis, by = "SIREN")
 ```
 
 
-## Titre de niveau 2
-
-Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed non risus. Suspendisse lectus tortor, dignissim sit amet, adipiscing nec, ultricies sed, dolor. Cras elementum ultrices diam. Maecenas ligula massa, varius a, semper congue, euismod non, mi. Proin porttitor, orci nec nonummy molestie, enim est eleifend mi, non fermentum diam nisl sit amet erat. Duis semper. Duis arcu massa, scelerisque vitae, consequat in, pretium a, enim. Pellentesque congue. Ut in risus volutpat libero pharetra tempor. Cras vestibulum bibendum augue. Praesent egestas leo in pede. Praesent blandit odio eu enim. Pellentesque sed dui ut augue blandit sodales. Vestibulum ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia Curae; Aliquam nibh. Mauris ac mauris sed pede pellentesque fermentum. Maecenas adipiscing ante non diam sodales hendrerit. 
-
-## Les petites astuces
-
-Quelques paramètres à changer si vous voulez un R Markdown légèrement différent : 
-
-- `<br>` saute une ligne entre 2 éléments 
-- `number_sections: true` dans l'en-tête de ce document numérote automatiquement les parties et sous-parties (retirer le `#` dans l'en-tête pour l'utiliser)
-- `toc: false` supprime la table des matières (table of contents, *toc*) qui s'affiche par défaut au début du document avec une profondeur maximale de 4 actuellement
-- `date: "1er janvier 2023"` affiche une date fixe car entrée comme un texte. Actuellement c'est la date du jour où le rapport est généré qui apparaît automatiquement dans l'en-tête du document
-- **texte en gras**, *texte en italique*, ***texte en gras italique***
-
-# Une deuxième section divisée en 3
-
-<div class = "row">
-  
-<div class = "col-md-4">
-Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed non risus. Suspendisse lectus tortor, dignissim sit amet, adipiscing nec, ultricies sed, dolor. Cras elementum ultrices diam. Maecenas ligula massa, varius a, semper congue, euismod non, mi.
-</div>
-  
-<div class = "col-md-4">
-Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed non risus. Suspendisse lectus tortor, dignissim sit amet, adipiscing nec, ultricies sed, dolor. Cras elementum ultrices diam. Maecenas ligula massa, varius a, semper congue, euismod non, mi.
-</div>
-  
-<div class = "col-md-4">
-```{r graph}
-library(tidyverse)
-ggplot( mtcars, aes(x=mpg)) + 
-  geom_histogram(fill="skyblue", alpha=0.5) + 
-  theme_minimal()
-```
-</div>
-</div>
-
-## Faire ressortir du texte dans une boxe
 
 
-<br>
 
-<style>
-div.blue { background-color:#fff1eb; border-radius: 5px; padding: 20px;}
-</style>
-<div class = "blue">
 
-**Ma boxe**
 
-Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed non risus. Suspendisse lectus tortor, dignissim sit amet, adipiscing nec, ultricies sed, dolor. Cras elementum ultrices diam. Maecenas ligula massa, varius a, semper congue, euismod non, mi. Proin porttitor, orci nec nonummy molestie, enim est eleifend mi, non fermentum diam nisl sit amet erat. Duis semper. Duis arcu massa, scelerisque vitae, consequat in, pretium a, enim.
-
-</div>
 
