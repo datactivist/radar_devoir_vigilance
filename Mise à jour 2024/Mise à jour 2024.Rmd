@@ -195,6 +195,25 @@ ggVennDiagram(table3, label_alpha = 0)
 library(DT)
 ddv_sirene <- anti_join(unites_legales_ddv_sirene, entreprises_ddv_orbis, by = "SIREN") |> 
     arrange(`Dénomination de l'unité légale`)
+rio::export(ddv_sirene, "data/out/ddv_sirene_uniquement.csv")
+
+# Bouton téléchargement
+library(xfun)
+library(downloadthis)
+download_file(
+  path = "data/out/ddv_sirene_uniquement.csv",
+  output_name = "ddv_sirene_uniquement",
+  button_label = "Données",
+  has_icon = TRUE,
+  icon = "fa fa-download",
+  self_contained = FALSE,
+  class = "button")
+```
+
+<br>
+
+```{r}
+# Affichage des données
 datatable(ddv_sirene)
 ```
 
@@ -204,6 +223,23 @@ datatable(ddv_sirene)
 # Base Sirene uniquement
 ddv_orbis <- anti_join(entreprises_ddv_orbis, unites_legales_ddv_sirene, by = "SIREN") |> 
     arrange(`Nom de l'entreprise Latin alphabet`)
+rio::export(ddv_orbis, "data/out/ddv_orbis_uniquement.csv")
+
+# Bouton téléchargement
+download_file(
+  path = "data/out/ddv_orbis_uniquement.csv",
+  output_name = "ddv_orbis_uniquement",
+  button_label = "Données",
+  has_icon = TRUE,
+  icon = "fa fa-download",
+  self_contained = FALSE,
+  class = "button")
+```
+
+<br>
+
+```{r}
+# Affichage des données
 datatable(ddv_orbis)
 ```
 
@@ -215,6 +251,23 @@ datatable(ddv_orbis)
 # Entreprises communes aux bases Sirene et Orbis
 ddv_sirene_orbis <- inner_join(unites_legales_ddv_sirene, entreprises_ddv_orbis, by = "SIREN") |> 
     arrange(`Dénomination de l'unité légale`)
+rio::export(ddv_sirene_orbis, "data/out/ddv_sirene_orbis.csv")
+
+# Bouton téléchargement
+download_file(
+  path = "data/out/ddv_sirene_orbis.csv",
+  output_name = "ddv_sirene_orbis",
+  button_label = "Données",
+  has_icon = TRUE,
+  icon = "fa fa-download",
+  self_contained = FALSE,
+  class = "button")
+```
+
+<br>
+
+```{r}
+# Affichage des données
 datatable(ddv_sirene_orbis)
 ```
 
@@ -248,6 +301,23 @@ ddv_sirene_orbis_full <- full_join(unites_legales_ddv_sirene |> mutate(Source = 
            annee_derniers_effectifs_Orbis:derniers_effectifs_moins2_Orbis, forme_juridique_Sirene, annee_maj_forme_juridique_Orbis, 
            forme_juridique_Orbis, nombre_etablissements_Sirene) |> 
     arrange(nom_entreprise)
+rio::export(ddv_sirene_orbis_full, "data/out/ddv_sirene_orbis_full.csv")
+
+# Bouton téléchargement
+download_file(
+  path = "data/out/ddv_sirene_orbis_full.csv",
+  output_name = "ddv_sirene_orbis_full",
+  button_label = "Données",
+  has_icon = TRUE,
+  icon = "fa fa-download",
+  self_contained = FALSE,
+  class = "button")
+```
+
+<br>
+
+```{r}
+# Affichage des données
 datatable(ddv_sirene_orbis_full)
 ```
 
