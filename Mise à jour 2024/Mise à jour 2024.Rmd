@@ -40,7 +40,7 @@ htmltools::img(src = "https://nextcloud.datactivist.coop/s/o53wzfMNnFosQni/previ
 
 # Introduction
 
-# Sélection des données
+# Import des données
 
 Comparaison du nombre d'entreprises selon la source : 
 
@@ -83,14 +83,14 @@ nb_salaries <- sirene |>
 forme_juri_salaries <- intersect(forme_juri, nb_salaries) |> 
     select(-c(`Tranche de l'effectif de l'établissement triable`, `Tranche de l'effectif de l'unité légale triable`, 
               `Année de la tranche d'effectif de l'établissement`, 
-              `Année de la tranche de l'effectif de l'unité légale`:`Catégorie juridique de l'unité légale`))
+              `Date du dernier traitement de l'unité légale`:`Catégorie juridique de l'unité légale`))
 
 # UNITÉS LÉGALES DDV
-ul_ddv <- forme_juri_salaries |> 
+unites_legales_ddv_sirene <- forme_juri_salaries |> 
     mutate(nombre_etablissements = n(), .by = SIREN) |> 
     distinct(SIREN, `Dénomination de l'unité légale`, `Tranche de l'effectif de l'unité légale`, 
-             `Nature juridique de l'unité légale`, nombre_etablissements)
-rio::export(ul_ddv, "data/out/unites-legales_ddv_SIRENE.csv")
+             `Année de la tranche de l'effectif de l'unité légale`, `Nature juridique de l'unité légale`, nombre_etablissements)
+rio::export(unites_legales_ddv_sirene, "data/out/unites-legales_ddv_SIRENE.csv")
 ```
 
 ## Base Orbis
@@ -98,7 +98,7 @@ rio::export(ul_ddv, "data/out/unites-legales_ddv_SIRENE.csv")
 Les données de la base Orbis ont été téléchargées le 17 juillet 2024 sur [orbis-r1-bvdinfo-com.acces-distant.sciencespo.fr](https://orbis-r1-bvdinfo-com.acces-distant.sciencespo.fr/version-20240621-3-2/Orbis/1/Companies/List), via un identifiant donnant accès aux données fermées. Les filtres suivants ont été appliqués : 
 
 - **Statut** : *Entreprises actives*, ou en *Situation inconnue*, pour un total de **373.396.812** entreprises ;
-- **Forme juridique** :  *SA - SA (France), SA directoire (France), SCA - SCA (France), Société Anonyme (France), Société européenne (France), Société par actions simplifiée - SAS (France)*, pour un total de **532.075** entreprises ;
+- **Forme juridique nationale** :  *SA - SA (France), SA directoire (France), SCA - SCA (France), Société Anonyme (France), Société européenne (France), Société par actions simplifiée - SAS (France)*, pour un total de **532.075** entreprises ;
 - **Nombre d'employés** : *5.000 et plus* pour les trois dernières années disponibles (lorsqu'il y a au moins 1 des 3 années disponible), pour un total de **21.588** entreprises (7.827 si on sélectionne les entreprises dont les comptes des 3 dernières années sont tous connus).
 
 Seules 265 entreprises remplissent les caractéristiques listées (139 si on sélectionne les entreprises dont les comptes des 3 dernières années sont tous connus). 
@@ -125,9 +125,12 @@ entreprises_ddv_orbis <- orbis |>
     mutate(derniers_effectifs = coalesce(`EffectifsDernière année disp.`,`EffectifsAnnée - 1`,`EffectifsAnnée - 2`),
            effectifs_22_23_sup_5000 = case_when(`Dernière année disp.` == 2023 & 
                                                     `EffectifsDernière année disp.` > 5000 & 
-                                                    `EffectifsAnnée - 1` > 5000 ~ "1",
-                                                .default = "0"),
-           effectifs_last_sup_5000 = ifelse(derniers_effectifs > 5000, "1", "0")) |> 
+                                                    `EffectifsAnnée - 1` > 5000 ~ TRUE,
+                                                `Dernière année disp.` == 2023 & 
+                                                    `EffectifsDernière année disp.` <= 5000 & 
+                                                    `EffectifsAnnée - 1` <= 5000 ~ FALSE,
+                                                .default = NA_real_),
+           derniers_effectifs_sup_5000 = ifelse(derniers_effectifs > 5000, TRUE, FALSE)) |> 
     # extraction SIRET
     mutate(`Code d'identifiant` = strsplit(as.character(`Code d'identifiant`), ";"),
            `Libellé d'identifiant` = strsplit(as.character(`Libellé d'identifiant`), ";")) |> 
@@ -137,22 +140,129 @@ entreprises_ddv_orbis <- orbis |>
     slice(1, .by = `Nom de l'entreprise Latin alphabet`) |> 
     mutate(SIREN = substr(`Code d'identifiant`, 1, 9))
 
-table(entreprises_ddv_orbis$effectifs_22_23_sup_5000)
-table(entreprises_ddv_orbis$effectifs_last_sup_5000)
+#table(entreprises_ddv_orbis$effectifs_22_23_sup_5000)
+#table(entreprises_ddv_orbis$derniers_effectifs_sup_5000)
 
 # Entreprises non concernées par le DDV
 entreprises_non_ddv <- entreprises_ddv_orbis |> 
-    filter(effectifs_22_23_sup_5000 == "0" & effectifs_last_sup_5000 == "0")
+    filter(effectifs_22_23_sup_5000 == FALSE, derniers_effectifs_sup_5000 == FALSE)
+
+# Entreprises concerncées par le DDV
+entreprises_ddv_orbis <- entreprises_ddv_orbis |> 
+    filter(effectifs_22_23_sup_5000 == TRUE | derniers_effectifs_sup_5000 == TRUE)
 ```
 
-## Liste des entreprises soumises au devoir de vigilance
+# Liste d'entreprises soumises au devoir de vigilance{.tabset}
+
+```{r eval=FALSE, include=FALSE}
+# Données
+table3 <- data.frame(orbis = c(0, anti_join(entreprises_ddv_orbis, unites_legales_ddv_sirene, by = "SIREN") |> nrow() + inner_join(unites_legales_ddv_sirene, entreprises_ddv_orbis, by = "SIREN") |> nrow(),
+                              inner_join(unites_legales_ddv_sirene, entreprises_ddv_orbis, by = "SIREN") |> nrow()),
+                    sirene = c(anti_join(unites_legales_ddv_sirene, entreprises_ddv_orbis, by = "SIREN") |> nrow() + inner_join(unites_legales_ddv_sirene, entreprises_ddv_orbis, by = "SIREN") |> nrow(), 0,
+                               inner_join(unites_legales_ddv_sirene, entreprises_ddv_orbis, by = "SIREN") |> nrow())) |> 
+    slice(rep(1:n(), times = c(sirene[1], orbis[2], sirene[3]))) |> 
+    mutate_all(na_if, 0) |> 
+    as.list()
+
+# Graphique
+library(ggVennDiagram)
+ggVennDiagram(table3, label_alpha = 0) 
+
+  labs(title = "Ce que vendent les commerces répondants", subtitle = " ") +
+  scale_fill_gradient(low = "#F4FAFE", high = "#4981BF") +
+  guides(fill = guide_legend(title = "Nombre de \ncommerces")) + 
+  theme(legend.position = "top",
+        strip.text.x = element_text(size = 12, face = "bold"),
+        strip.background = element_blank(),
+        axis.title = element_blank(),
+        axis.ticks = element_blank(),
+        axis.line = element_blank(),
+        axis.text = element_blank(),
+        legend.text = ggplot2::element_text(size = 18,color = "#222222"), 
+        text = element_text(family = "Montserrat", size = 12),
+        plot.title = ggplot2::element_text(size = 17, face = "bold", color = "#222222"), 
+        plot.caption = ggplot2::element_text(face = "italic", size = 18, 
+                                             color = "#666666", margin = ggplot2::margin(9, 0, 9, 0)), 
+        plot.title.position = "plot", 
+        plot.caption.position = "plot")
+```
+
+
+## Sirene uniquement
+
+```{r}
+# Base Sirene uniquement
+library(DT)
+ddv_sirene <- anti_join(unites_legales_ddv_sirene, entreprises_ddv_orbis, by = "SIREN") |> 
+    arrange(`Dénomination de l'unité légale`)
+datatable(ddv_sirene)
+```
+
+## Orbis uniquement
+
+```{r}
+# Base Sirene uniquement
+ddv_orbis <- anti_join(entreprises_ddv_orbis, unites_legales_ddv_sirene, by = "SIREN") |> 
+    arrange(`Nom de l'entreprise Latin alphabet`)
+datatable(ddv_orbis)
+```
+
+
+## Entreprises communes
+
 
 ```{r}
 # Entreprises communes aux bases Sirene et Orbis
-ddv_sirene_orbis <- inner_join(ul_ddv, entreprises_ddv_orbis, by = "SIREN")
+ddv_sirene_orbis <- inner_join(unites_legales_ddv_sirene, entreprises_ddv_orbis, by = "SIREN") |> 
+    arrange(`Dénomination de l'unité légale`)
+datatable(ddv_sirene_orbis)
+```
+
+## Liste finale
+
+```{r}
+library(tm)
+# Entreprises communes aux bases Sirene et Orbis
+ddv_sirene_orbis_full <- full_join(unites_legales_ddv_sirene |> mutate(Source = "Sirene"), 
+                                   entreprises_ddv_orbis |> mutate(Source = "Orbis"), 
+                                   by = "SIREN", suffix = c("_Sirene", "_Orbis")) |> 
+    mutate(Source = case_when(Source_Sirene == "Sirene" & Source_Orbis == "Orbis" ~ "Sirene et Orbis",
+                              Source_Sirene == "Sirene" & is.na(Source_Orbis) ~ "Sirene",
+                              Source_Orbis == "Orbis" & is.na(Source_Sirene) ~ "Orbis",
+                              .default = NA_character_),
+           nom_entreprise = coalesce(`Dénomination de l'unité légale`, `Nom de l'entreprise Latin alphabet`),
+           SIRET_Orbis = removeWords(`Code d'identifiant`, "-"),
+           annee_maj_forme_juridique_Orbis = na_if(`Dernière mise à jour - Statut...`, "")) |> 
+    select(-c(Source_Sirene, Source_Orbis, `Dénomination de l'unité légale`, `Nom de l'entreprise Latin alphabet`)) |> 
+    rename(effectifs_unite_legale_Sirene = `Tranche de l'effectif de l'unité légale`,
+           annee_effectifs_ul_Sirene = `Année de la tranche de l'effectif de l'unité légale`,
+           annee_derniers_effectifs_Orbis = `Dernière année disp.`,
+           derniers_effectifs_Orbis = `EffectifsDernière année disp.`,
+           derniers_effectifs_moins1_Orbis = `EffectifsAnnée - 1`,
+           derniers_effectifs_moins2_Orbis = `EffectifsAnnée - 2`,
+           forme_juridique_Sirene = `Nature juridique de l'unité légale`,
+           forme_juridique_Orbis = `Statut juridique standardisé`,
+           SIREN_Sirene = SIREN,
+           nombre_etablissements_Sirene = nombre_etablissements) |> 
+    select(Source, nom_entreprise, SIREN_Sirene, SIRET_Orbis, annee_effectifs_ul_Sirene, effectifs_unite_legale_Sirene, 
+           annee_derniers_effectifs_Orbis:derniers_effectifs_moins2_Orbis, forme_juridique_Sirene, annee_maj_forme_juridique_Orbis, 
+           forme_juridique_Orbis, nombre_etablissements_Sirene) |> 
+    arrange(nom_entreprise)
+datatable(ddv_sirene_orbis_full)
 ```
 
 
+```{r eval=FALSE, include=FALSE}
+# Brouillon
+
+## Cas particuliers
+
+### Données Orbis
+
++ **Effectifs inférieurs à 50 les 2 dernières années disponibles dans les données, et supérieurs à 150.000 personnes**
+
+RALLYE, FINATIS, FONCIERE EURIS
+```
 
 
 
