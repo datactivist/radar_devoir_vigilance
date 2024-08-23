@@ -10,6 +10,7 @@ output:
       toc_depth: 4
       collapsed: true
       smooth_scroll: true
+      code_folding: hide
       css: styles.css
       includes:
         in_header: header.html
@@ -42,16 +43,10 @@ htmltools::img(src = "https://nextcloud.datactivist.coop/s/o53wzfMNnFosQni/previ
 
 # Import des données
 
-Comparaison du nombre d'entreprises selon la source : 
-
-- Orbis : 23.795.040 entreprises le 18 juillet 2024 ;
-- Sirene (V3) : 38.833.027 entreprises le 18 juillet 2024 ;
-
-
 
 ## Base Sirene
 
-Les données de la base SIRENE ont été traitées dans le script *'Pre-run_Sirene.R'*, étant donné le poids des données et pour ne pas ralentir l'exécution de cette page. 
+Étant donné le poids des données et pour ne pas ralentir l'exécution de cette page, les données de la base SIRENE ont été traitées dans le script *'Pre-run_Sirene.R'*. 
 
 Le 14 août 2024, les unités légales de 5000 à 9999 salariés, et celles de plus de 100000 salariés ont été importées puis rassemblées en une seule base, sur laquelle les filtres et calculs de cette page vont être appliqués.
 
@@ -93,9 +88,9 @@ unites_legales_ddv_sirene <- forme_juri_salaries |>
 rio::export(unites_legales_ddv_sirene, "data/out/unites-legales_ddv_SIRENE.csv")
 ```
 
-## Base Orbis
+## Base Orbis{.tabset}
 
-Les données de la base Orbis ont été téléchargées le 17 juillet 2024 sur [orbis-r1-bvdinfo-com.acces-distant.sciencespo.fr](https://orbis-r1-bvdinfo-com.acces-distant.sciencespo.fr/version-20240621-3-2/Orbis/1/Companies/List), via un identifiant donnant accès aux données fermées. Les filtres suivants ont été appliqués : 
+Les données de la base Orbis ont été extraites une première fois le 17 juillet 2024 depuis la page [orbis-r1-bvdinfo-com.acces-distant.sciencespo.fr](https://orbis-r1-bvdinfo-com.acces-distant.sciencespo.fr/version-20240621-3-2/Orbis/1/Companies/List), via un identifiant donnant accès aux données fermées. Les filtres suivants ont été appliqués : 
 
 - **Statut** : *Entreprises actives*, ou en *Situation inconnue*, pour un total de **373.396.812** entreprises ;
 - **Forme juridique nationale** :  *SA - SA (France), SA directoire (France), SCA - SCA (France), Société Anonyme (France), Société européenne (France), Société par actions simplifiée - SAS (France)*, pour un total de **532.075** entreprises ;
@@ -103,16 +98,36 @@ Les données de la base Orbis ont été téléchargées le 17 juillet 2024 sur [
 
 Seules 265 entreprises remplissent les caractéristiques listées (139 si on sélectionne les entreprises dont les comptes des 3 dernières années sont tous connus). 
 
+<br>
+
+Le 22 août 2024, une nouvelle extraction a été faite en appliquant les mêmes filtres :
+
+- **Statut** : *Entreprises actives*, ou en *Situation inconnue*, pour un total de **380.602.334** entreprises ;
+- **Forme juridique nationale** :  *SA - SA (France), SA directoire (France), SCA - SCA (France), Société Anonyme (France), Société européenne (France), Société par actions simplifiée - SAS (France)*, pour un total de **2.071.794** entreprises ;
+- **Nombre d'employés** : *5.000 et plus* pour les trois dernières années disponibles (lorsqu'il y a au moins 1 des 3 années disponible), pour un total de **15.346** entreprises.
+
+258 entreprises remplissent les caractéristiques listées.
+
 ```{r}
 library(jsonlite)
 
 # Données
-orbis <- fromJSON(txt = "data/in/data_orbis.json", flatten = T)
+orbis_old <- fromJSON(txt = "data/in/data_orbis_18-07.json", flatten = T)
+orbis <- fromJSON(txt = "data/in/data_orbis_22-08.json", flatten = T)
 
+# test <- symdiff(orbis$`Nom de l'entreprise Latin alphabet`, orbis_old$`Nom de l'entreprise Latin alphabet`)
+# test <- cbind(orbis |> 
+#                   select(`Nom de l'entreprise Latin alphabet`) |> 
+#                   arrange(`Nom de l'entreprise Latin alphabet`), 
+#               orbis_new |> 
+#                   select(`Nom de l'entreprise Latin alphabet`) |> 
+#                   arrange(`Nom de l'entreprise Latin alphabet`)) |> 
+#     rename(old = 1, new = 2) |> 
+#     mutate(is_diff = ifelse(old != new, 1, 0))
 
 ##--- Filtres
 
-entreprises_ddv_orbis <- orbis |> 
+entreprises_ddv_orbis <- full_join(orbis, orbis_old) |> 
     filter(`Dernière année disp.` >= 2012) |> 
     # mise en forme données d'effectifs
     mutate(`EffectifsDernière année disp.` = str_remove_all(`EffectifsDernière année disp.`, ",|n.d."),
@@ -152,7 +167,64 @@ entreprises_ddv_orbis <- entreprises_ddv_orbis |>
     filter(effectifs_22_23_sup_5000 == TRUE | derniers_effectifs_sup_5000 == TRUE)
 ```
 
+Entre les deux extractions, de nouvelles entreprises apparaissent dans la liste, et d'autres n'y sont plus. Les entreprises sont les suivantes : 
+
+### Anciennes entreprises
+
+```{r}
+# Filtre sur les entreprises dans l'extraction du 17 juillet et pas du 22 août
+library(DT)
+anciennes_entreprises <- setdiff(orbis_old$`Nom de l'entreprise Latin alphabet`, orbis$`Nom de l'entreprise Latin alphabet`) |> 
+    as.data.frame() |> 
+    rename(`Nom de l'entreprise Latin alphabet` = 1) |> 
+    left_join(orbis_old, by = "Nom de l'entreprise Latin alphabet") |> 
+    select(-c(`Dernière mise à jour - Statut...`:`Previous SIRET number...`))# |> 
+    #filter(`Dernière année disp.` >= 2012)
+
+entps_inactives <- anciennes_entreprises |> 
+    filter(`Dernière année disp.` < 2012) |> 
+    select(`Nom de l'entreprise Latin alphabet`) |> 
+    t()
+```
+
+`r nrow(anciennes_entreprises)` entreprises apparaissaient dans l'extraction du 17 juillet mais pas dans celle du 22 août. Parmi celles-ci,  la dernière année disponible des effectifs remonte jusqu'à 1992. Une recherche manuelle a été menée sur les entreprises avec les années disponibles d'effectifs les plus anciennes. 
+
+Ainsi, les entreprises dont la date est antérieure à 2012 ont été cessées ou radiées et ne sont plus en activité aujourd'hui, il s'agit des entreprises suivantes qui sont donc retirées des données Orbis d'entreprises soumises au devoir de vigilance : `r entps_inactives`.
+
+```{r}
+datatable(anciennes_entreprises, options = list(pageLength = 5, scrollX = TRUE))
+```
+
+### Nouvelles entreprises
+
+```{r}
+nouvelles_entreprises <- setdiff(orbis$`Nom de l'entreprise Latin alphabet`, orbis_old$`Nom de l'entreprise Latin alphabet`) |> 
+    as.data.frame() |> 
+    rename(`Nom de l'entreprise Latin alphabet` = 1) |> 
+    left_join(orbis, by = "Nom de l'entreprise Latin alphabet")
+```
+
+`r nrow(nouvelles_entreprises)` entreprises apparaissent dans l'extraction du 22 août mais pas dans celle du 17 juillet.
+
+```{r}
+datatable(nouvelles_entreprises, options = list(pageLength = 5, scrollX = TRUE))
+```
+
+
 # Liste d'entreprises soumises au devoir de vigilance{.tabset}
+
+Les règles de décision suivantes ont été appliquées par source de données pour obtenir la liste d'entreprises soumises au devoir de vigilance : 
+
+- ***données Sirene*** : 
+    - *'Nature juridique de l'unité légale'* a l'une des valeurs suivantes : "SAS, société par actions simplifiée", "Société européenne", "Société en commandite par actions", ou contient le mot "SA" ;
+    - *'Tranche de l'effectif de l'unité légale'* ou *'Tranche de l'effectif de l'établissement'* a l'une des valeurs suivantes : "5 000 à 9 999 salariés" ou "10 000 salariés et plus".
+- ***données Orbis*** : 
+    - *'Forme juridique nationale'* a l'une des valeurs suivantes (filtre appliqué dès la recherche sur le portail Orbis) : "SA - SA (France)", "SA directoire (France)", "SCA - SCA (France)", "Société Anonyme (France)", "Société européenne (France)", "Société par actions simplifiée - SAS (France)" ;
+    - *'Nombre d'employés'* avec l'un de ces deux cas : les effectifs des deux dernières années sont supérieurs à 5000 et la dernière année disponible est 2023 (il s'agit donc des effectifs de 2022 et 2023), ou lorsque la dernière année disponible n'est pas 2023 (2022 ou antérieur) les derniers effectifs disponibles sont supérieurs à 5000.
+
+
+Pour les données Orbis, les entreprises des 2 extractions ont été combinées pour ne passer à côté d'aucune entreprise concernée, en laissant la possibilité d'un tri manuel à partir de cette liste. Seules les entreprises dont la dernière année des effectifs est antérieure à 2012 ont été écartées, puisqu'il s'agit d'entreprises aujourd'hui inactives. 
+
 
 ```{r eval=FALSE, include=FALSE}
 # Données
@@ -190,9 +262,9 @@ ggVennDiagram(table3, label_alpha = 0)
 
 ## Sirene uniquement
 
+
 ```{r}
 # Base Sirene uniquement
-library(DT)
 ddv_sirene <- anti_join(unites_legales_ddv_sirene, entreprises_ddv_orbis, by = "SIREN") |> 
     arrange(`Dénomination de l'unité légale`)
 rio::export(ddv_sirene, "data/out/ddv_sirene_uniquement.csv")
@@ -210,14 +282,17 @@ download_file(
   class = "button")
 ```
 
+`r nrow(ddv_sirene)` entreprises remplissent les conditions sur la forme juridique et les effectifs dans les données Sirene. 
+
 <br>
 
 ```{r}
 # Affichage des données
-datatable(ddv_sirene)
+datatable(ddv_sirene, options = list(pageLength = 10, scrollX = TRUE))
 ```
 
 ## Orbis uniquement
+
 
 ```{r}
 # Base Sirene uniquement
@@ -236,11 +311,13 @@ download_file(
   class = "button")
 ```
 
+`r nrow(ddv_orbis)` entreprises remplissent les conditions sur la forme juridique et les effectifs dans les données Orbis. 
+
 <br>
 
 ```{r}
 # Affichage des données
-datatable(ddv_orbis)
+datatable(ddv_orbis, options = list(pageLength = 10, scrollX = TRUE))
 ```
 
 
@@ -264,14 +341,17 @@ download_file(
   class = "button")
 ```
 
+`r nrow(ddv_sirene_orbis)` entreprises remplissent les conditions sur la forme juridique et les effectifs dans les données Orbis comme dans les données Sirene. 
+
 <br>
 
 ```{r}
 # Affichage des données
-datatable(ddv_sirene_orbis)
+datatable(ddv_sirene_orbis, options = list(pageLength = 10, scrollX = TRUE))
 ```
 
 ## Liste finale
+
 
 ```{r}
 library(tm)
@@ -314,11 +394,15 @@ download_file(
   class = "button")
 ```
 
+Finalement, ce sont `r nrow(ddv_sirene_orbis_full)` entreprises qui remplissent les conditions. 
+
+À partir des données Orbis des effectifs en 2022 et 2023, 3 entreprises ont été écartées, ne remplissant pas les conditions (il s'agit des entreprises `r entreprises_non_ddv |> select("Nom de l'entreprise Latin alphabet") |> t()`). Une vérification a été faite pour s'assurer que ces entreprises ne soient pas dans la liste créée à partir des données Sirene, qui est moins restrictive sur les effectifs étant donné que seuls les effectifs de 2021 sont disponibles. 
+
 <br>
 
 ```{r}
 # Affichage des données
-datatable(ddv_sirene_orbis_full)
+datatable(ddv_sirene_orbis_full, options = list(pageLength = 10, scrollX = TRUE))
 ```
 
 
