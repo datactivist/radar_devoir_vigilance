@@ -3,16 +3,13 @@ title: "Liste des entreprises soumises au devoir de vigilance"
 subtitle: "Mise à jour de 2024"
 date: Dernière modification le `r format(Sys.time(), '%d %B %Y')`
 output:
-    rmarkdown::html_document:
-      #number_sections: true
-      theme: paper
-      toc: true
-      toc_depth: 4
-      collapsed: true
-      smooth_scroll: true
-      code_folding: hide
-      css: styles.css
-      includes:
+  html_document:
+    #code_folding: hide
+    theme: paper
+    toc: true
+    toc_depth: 4
+    css: styles.css
+    includes:
         in_header: header.html
         after_body: footer.html
 ---
