@@ -109,8 +109,12 @@ Le 22 août 2024, une nouvelle extraction a été faite en appliquant les mêmes
 library(jsonlite)
 
 # Données
-orbis_old <- fromJSON(txt = "data/in/data_orbis_18-07.json", flatten = T)
-orbis <- fromJSON(txt = "data/in/data_orbis_22-08.json", flatten = T)
+orbis_old <- fromJSON(txt = "data/in/data_orbis_18-07.json", flatten = T) |> 
+    select(-c(`Previous SIRET number...`, `Previous SIRET number (France)`)) |> 
+    mutate(Extraction = "17 juillet")
+orbis <- fromJSON(txt = "data/in/data_orbis_22-08.json", flatten = T) |> 
+    filter(`Forme juridique nationale` != "Société à responsabilité limitée - SARL") |> 
+    mutate(Extraction = "22 août")
 
 # test <- symdiff(orbis$`Nom de l'entreprise Latin alphabet`, orbis_old$`Nom de l'entreprise Latin alphabet`)
 # test <- cbind(orbis |> 
@@ -175,7 +179,7 @@ anciennes_entreprises <- setdiff(orbis_old$`Nom de l'entreprise Latin alphabet`,
     as.data.frame() |> 
     rename(`Nom de l'entreprise Latin alphabet` = 1) |> 
     left_join(orbis_old, by = "Nom de l'entreprise Latin alphabet") |> 
-    select(-c(`Dernière mise à jour - Statut...`:`Previous SIRET number...`))# |> 
+    select(-c(`Dernière mise à jour - Statut...`, `Statut juridique standardisé`, Extraction))# |> 
     #filter(`Dernière année disp.` >= 2012)
 
 entps_inactives <- anciennes_entreprises |> 
@@ -189,7 +193,8 @@ entps_inactives <- anciennes_entreprises |>
 Ainsi, les entreprises dont la date est antérieure à 2012 ont été cessées ou radiées et ne sont plus en activité aujourd'hui, il s'agit des entreprises suivantes qui sont donc retirées des données Orbis d'entreprises soumises au devoir de vigilance : `r entps_inactives`.
 
 ```{r}
-datatable(anciennes_entreprises, options = list(pageLength = 5, scrollX = TRUE))
+datatable(anciennes_entreprises, extensions = 'FixedColumns', 
+          options = list(pageLength = 5, scrollX = TRUE, fixedColumns = list(leftColumns = 2)))
 ```
 
 ### Nouvelles entreprises
@@ -198,13 +203,15 @@ datatable(anciennes_entreprises, options = list(pageLength = 5, scrollX = TRUE))
 nouvelles_entreprises <- setdiff(orbis$`Nom de l'entreprise Latin alphabet`, orbis_old$`Nom de l'entreprise Latin alphabet`) |> 
     as.data.frame() |> 
     rename(`Nom de l'entreprise Latin alphabet` = 1) |> 
-    left_join(orbis, by = "Nom de l'entreprise Latin alphabet")
+    left_join(orbis, by = "Nom de l'entreprise Latin alphabet") |> 
+    select(-Extraction)
 ```
 
 `r nrow(nouvelles_entreprises)` entreprises apparaissent dans l'extraction du 22 août mais pas dans celle du 17 juillet.
 
 ```{r}
-datatable(nouvelles_entreprises, options = list(pageLength = 5, scrollX = TRUE))
+datatable(nouvelles_entreprises, 
+          options = list(pageLength = 5, scrollX = TRUE, fixedColumns = list(leftColumns = 2)))
 ```
 
 
@@ -285,7 +292,8 @@ download_file(
 
 ```{r}
 # Affichage des données
-datatable(ddv_sirene, options = list(pageLength = 10, scrollX = TRUE))
+datatable(ddv_sirene, extensions = 'FixedColumns', 
+          options = list(pageLength = 10, scrollX = TRUE, fixedColumns = list(leftColumns = 2)))
 ```
 
 ## Orbis uniquement
@@ -310,11 +318,14 @@ download_file(
 
 `r nrow(ddv_orbis)` entreprises remplissent les conditions sur la forme juridique et les effectifs dans les données Orbis. 
 
+Une colonne sur la date d'extraction (indiquant s'il s'agit de la première ou la deuxième, nommée '***Extraction***') a été ajoutée, pour permettre d'identifier les entreprises extraites le 17 juillet 2024, qui sont possiblement radiées ou cessées ("*situation inconnue"*). Les entreprises apparaissant dans la liste et extraites le 22 août sont quant à elles toutes actives aujourd'hui. 
+
 <br>
 
 ```{r}
 # Affichage des données
-datatable(ddv_orbis, options = list(pageLength = 10, scrollX = TRUE))
+datatable(ddv_orbis, extensions = 'FixedColumns',
+          options = list(pageLength = 10, fixedColumns = list(leftColumns = 2), scrollX = TRUE))
 ```
 
 
@@ -344,7 +355,8 @@ download_file(
 
 ```{r}
 # Affichage des données
-datatable(ddv_sirene_orbis, options = list(pageLength = 10, scrollX = TRUE))
+datatable(ddv_sirene_orbis, extensions = 'FixedColumns', 
+          options = list(pageLength = 10, scrollX = TRUE, fixedColumns = list(leftColumns = 2)))
 ```
 
 ## Liste finale
@@ -373,8 +385,9 @@ ddv_sirene_orbis_full <- full_join(unites_legales_ddv_sirene |> mutate(Source = 
            forme_juridique_Sirene = `Nature juridique de l'unité légale`,
            forme_juridique_Orbis = `Statut juridique standardisé`,
            SIREN_Sirene = SIREN,
-           nombre_etablissements_Sirene = nombre_etablissements) |> 
-    select(Source, nom_entreprise, SIREN_Sirene, SIRET_Orbis, annee_effectifs_ul_Sirene, effectifs_unite_legale_Sirene, 
+           nombre_etablissements_Sirene = nombre_etablissements,
+           extraction_Orbis = Extraction) |> 
+    select(Source, nom_entreprise, extraction_Orbis, SIREN_Sirene, SIRET_Orbis, annee_effectifs_ul_Sirene, effectifs_unite_legale_Sirene, 
            annee_derniers_effectifs_Orbis:derniers_effectifs_moins2_Orbis, forme_juridique_Sirene, annee_maj_forme_juridique_Orbis, 
            forme_juridique_Orbis, nombre_etablissements_Sirene) |> 
     arrange(nom_entreprise)
@@ -399,20 +412,18 @@ Finalement, ce sont `r nrow(ddv_sirene_orbis_full)` entreprises qui remplissent 
 
 ```{r}
 # Affichage des données
-datatable(ddv_sirene_orbis_full, options = list(pageLength = 10, scrollX = TRUE))
+datatable(ddv_sirene_orbis_full, extensions = 'FixedColumns', 
+          options = list(pageLength = 10, scrollX = TRUE, fixedColumns = list(leftColumns = 3)))
 ```
 
 
-```{r eval=FALSE, include=FALSE}
-# Brouillon
+```{r eval=TRUE, include=FALSE}
+# EXtraits des données à vérifier manuellement
+entreprises_orbis_effectifs_5000a9999 <- entreprises_ddv_orbis |> filter(derniers_effectifs >= 5000 & derniers_effectifs < 10000)
+rio::export(entreprises_orbis_effectifs_5000a9999, "data/out/entreprises_orbis_effectifs_5000-a-9999.csv")
 
-## Cas particuliers
-
-### Données Orbis
-
-+ **Effectifs inférieurs à 50 les 2 dernières années disponibles dans les données, et supérieurs à 150.000 personnes**
-
-RALLYE, FINATIS, FONCIERE EURIS
+entreprises_soumises_ddv_premiere_extraction <- ddv_orbis |> filter(Extraction == "17 juillet")
+rio::export(entreprises_soumises_ddv_premiere_extraction, "data/out/entreprises_soumises_ddv_premiere_extraction.csv")
 ```
 
 
