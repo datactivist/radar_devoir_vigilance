@@ -110,11 +110,9 @@ library(jsonlite)
 
 # Données
 orbis_old <- fromJSON(txt = "data/in/data_orbis_18-07.json", flatten = T) |> 
-    select(-c(`Previous SIRET number...`, `Previous SIRET number (France)`)) |> 
-    mutate(Extraction = "17 juillet")
+    select(-c(`Previous SIRET number...`, `Previous SIRET number (France)`))
 orbis <- fromJSON(txt = "data/in/data_orbis_22-08.json", flatten = T) |> 
-    filter(`Forme juridique nationale` != "Société à responsabilité limitée - SARL") |> 
-    mutate(Extraction = "22 août")
+    filter(`Forme juridique nationale` != "Société à responsabilité limitée - SARL")
 
 # test <- symdiff(orbis$`Nom de l'entreprise Latin alphabet`, orbis_old$`Nom de l'entreprise Latin alphabet`)
 # test <- cbind(orbis |> 
@@ -163,7 +161,7 @@ entreprises_ddv_orbis <- full_join(orbis, orbis_old) |>
 entreprises_non_ddv <- entreprises_ddv_orbis |> 
     filter(effectifs_22_23_sup_5000 == FALSE, derniers_effectifs_sup_5000 == FALSE)
 
-# Entreprises concerncées par le DDV
+# Entreprises concernées par le DDV
 entreprises_ddv_orbis <- entreprises_ddv_orbis |> 
     filter(effectifs_22_23_sup_5000 == TRUE | derniers_effectifs_sup_5000 == TRUE)
 ```
@@ -179,7 +177,7 @@ anciennes_entreprises <- setdiff(orbis_old$`Nom de l'entreprise Latin alphabet`,
     as.data.frame() |> 
     rename(`Nom de l'entreprise Latin alphabet` = 1) |> 
     left_join(orbis_old, by = "Nom de l'entreprise Latin alphabet") |> 
-    select(-c(`Dernière mise à jour - Statut...`, `Statut juridique standardisé`, Extraction))# |> 
+    select(-c(`Dernière mise à jour - Statut...`, `Statut juridique standardisé`))# |> 
     #filter(`Dernière année disp.` >= 2012)
 
 entps_inactives <- anciennes_entreprises |> 
@@ -203,8 +201,7 @@ datatable(anciennes_entreprises, extensions = 'FixedColumns',
 nouvelles_entreprises <- setdiff(orbis$`Nom de l'entreprise Latin alphabet`, orbis_old$`Nom de l'entreprise Latin alphabet`) |> 
     as.data.frame() |> 
     rename(`Nom de l'entreprise Latin alphabet` = 1) |> 
-    left_join(orbis, by = "Nom de l'entreprise Latin alphabet") |> 
-    select(-Extraction)
+    left_join(orbis, by = "Nom de l'entreprise Latin alphabet")
 ```
 
 `r nrow(nouvelles_entreprises)` entreprises apparaissent dans l'extraction du 22 août mais pas dans celle du 17 juillet.
@@ -227,7 +224,7 @@ Les règles de décision suivantes ont été appliquées par source de données 
     - *'Nombre d'employés'* avec l'un de ces deux cas : les effectifs des deux dernières années sont supérieurs à 5000 et la dernière année disponible est 2023 (il s'agit donc des effectifs de 2022 et 2023), ou lorsque la dernière année disponible n'est pas 2023 (2022 ou antérieur) les derniers effectifs disponibles sont supérieurs à 5000.
 
 
-Pour les données Orbis, les entreprises des 2 extractions ont été combinées pour ne passer à côté d'aucune entreprise concernée, en laissant la possibilité d'un tri manuel à partir de cette liste. Seules les entreprises dont la dernière année des effectifs est antérieure à 2012 ont été écartées, puisqu'il s'agit d'entreprises aujourd'hui inactives. 
+Pour les données Orbis, les entreprises des 2 extractions ont été combinées pour ne passer à côté d'aucune entreprise concernée. Seules les entreprises dont la dernière année des effectifs est antérieure à 2012 ont été écartées, puisqu'il s'agit d'entreprises aujourd'hui inactives. Toutes les autres entreprises sont en activité aujourd'hui.  
 
 
 ```{r eval=FALSE, include=FALSE}
@@ -318,7 +315,6 @@ download_file(
 
 `r nrow(ddv_orbis)` entreprises remplissent les conditions sur la forme juridique et les effectifs dans les données Orbis. 
 
-Une colonne sur la date d'extraction (indiquant s'il s'agit de la première ou la deuxième, nommée '***Extraction***') a été ajoutée, pour permettre d'identifier les entreprises extraites le 17 juillet 2024, qui sont possiblement radiées ou cessées ("*situation inconnue"*). Les entreprises apparaissant dans la liste et extraites le 22 août sont quant à elles toutes actives aujourd'hui. 
 
 <br>
 
@@ -385,13 +381,15 @@ ddv_sirene_orbis_full <- full_join(unites_legales_ddv_sirene |> mutate(Source = 
            forme_juridique_Sirene = `Nature juridique de l'unité légale`,
            forme_juridique_Orbis = `Statut juridique standardisé`,
            SIREN_Sirene = SIREN,
-           nombre_etablissements_Sirene = nombre_etablissements,
-           extraction_Orbis = Extraction) |> 
-    select(Source, nom_entreprise, extraction_Orbis, SIREN_Sirene, SIRET_Orbis, annee_effectifs_ul_Sirene, effectifs_unite_legale_Sirene, 
-           annee_derniers_effectifs_Orbis:derniers_effectifs_moins2_Orbis, forme_juridique_Sirene, annee_maj_forme_juridique_Orbis, 
+           nombre_etablissements_Sirene = nombre_etablissements) |> 
+    select(Source, nom_entreprise, SIREN_Sirene, SIRET_Orbis, annee_effectifs_ul_Sirene, effectifs_unite_legale_Sirene, 
+           annee_derniers_effectifs_Orbis:derniers_effectifs_moins2_Orbis, derniers_effectifs, forme_juridique_Sirene, annee_maj_forme_juridique_Orbis, 
            forme_juridique_Orbis, nombre_etablissements_Sirene) |> 
     arrange(nom_entreprise)
 rio::export(ddv_sirene_orbis_full, "data/out/ddv_sirene_orbis_full.csv")
+
+test <- ddv_sirene_orbis_full |> mutate(effectif_sup_10000 = ifelse(derniers_effectifs >= 10000, TRUE, FALSE))
+table(test$effectif_sup_10000)
 
 # Bouton téléchargement
 download_file(
