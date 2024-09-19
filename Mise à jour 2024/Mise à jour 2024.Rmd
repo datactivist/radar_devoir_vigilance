@@ -113,16 +113,7 @@ orbis_old <- fromJSON(txt = "data/in/data_orbis_18-07.json", flatten = T) |>
     select(-c(`Previous SIRET number...`, `Previous SIRET number (France)`))
 orbis <- fromJSON(txt = "data/in/data_orbis_22-08.json", flatten = T) |> 
     filter(`Forme juridique nationale` != "Société à responsabilité limitée - SARL")
-
-# test <- symdiff(orbis$`Nom de l'entreprise Latin alphabet`, orbis_old$`Nom de l'entreprise Latin alphabet`)
-# test <- cbind(orbis |> 
-#                   select(`Nom de l'entreprise Latin alphabet`) |> 
-#                   arrange(`Nom de l'entreprise Latin alphabet`), 
-#               orbis_new |> 
-#                   select(`Nom de l'entreprise Latin alphabet`) |> 
-#                   arrange(`Nom de l'entreprise Latin alphabet`)) |> 
-#     rename(old = 1, new = 2) |> 
-#     mutate(is_diff = ifelse(old != new, 1, 0))
+verif_manuelle_effectifs_orbis <- read_csv2("data/in/Effectif RDV II gv(EFFECTIF_donnees_brutes).csv")
 
 ##--- Filtres
 
@@ -153,9 +144,6 @@ entreprises_ddv_orbis <- full_join(orbis, orbis_old) |>
     arrange(desc(`Libellé d'identifiant`)) |> 
     slice(1, .by = `Nom de l'entreprise Latin alphabet`) |> 
     mutate(SIREN = substr(`Code d'identifiant`, 1, 9))
-
-#table(entreprises_ddv_orbis$effectifs_22_23_sup_5000)
-#table(entreprises_ddv_orbis$derniers_effectifs_sup_5000)
 
 # Entreprises non concernées par le DDV
 entreprises_non_ddv <- entreprises_ddv_orbis |> 
@@ -225,6 +213,23 @@ Les règles de décision suivantes ont été appliquées par source de données 
 
 
 Pour les données Orbis, les entreprises des 2 extractions ont été combinées pour ne passer à côté d'aucune entreprise concernée. Seules les entreprises dont la dernière année des effectifs est antérieure à 2012 ont été écartées, puisqu'il s'agit d'entreprises aujourd'hui inactives. Toutes les autres entreprises sont en activité aujourd'hui.  
+
+
+<style>
+div.blue { background-color:#efefef; border-radius: 5px; padding: 20px;}
+</style>
+<div class = "blue">
+
+**Vérification manuelle**
+
+Les données Orbis ne précisent pas s'il s'agit des effectifs France ou dans le monde. Les entreprises ayant des effectifs compris entre 5000 et 9999 ont donc fait l'objet d'une vérification manuelle, pour savoir si le devoir de vigilance s'applique ou non. 
+
+Parmi les 129 entreprises concernées, 53 faisaient déjà partie de la liste du radar datant de 2020, 17 sont soumises au DDV, 45 ne le sont pas, et pour 14 d'entre elles aucune information n'a pu être trouvée. Ces 14 entreprises sont donc écartées de la liste.  
+
+
+</div>
+
+<br>
 
 
 ```{r eval=FALSE, include=FALSE}
@@ -297,9 +302,18 @@ datatable(ddv_sirene, extensions = 'FixedColumns',
 
 
 ```{r}
+# Vérification manuelle des effectifs Orbis : entrperises à écarter
+orbis_a_ecarter <- verif_manuelle_effectifs_orbis |> 
+    filter(etat_recherche %in% c("information non trouvee", "non soumise DDV")) |> 
+    select(entreprise) |> 
+    mutate(non_soumises = TRUE)
+
 # Base Sirene uniquement
 ddv_orbis <- anti_join(entreprises_ddv_orbis, unites_legales_ddv_sirene, by = "SIREN") |> 
-    arrange(`Nom de l'entreprise Latin alphabet`)
+    arrange(`Nom de l'entreprise Latin alphabet`) |> 
+    left_join(orbis_a_ecarter, by = c("Nom de l'entreprise Latin alphabet" = "entreprise")) |> 
+    filter(is.na(non_soumises)) |> #si rien dans `non_soumises` alors entreprise OK
+    select(-non_soumises)
 rio::export(ddv_orbis, "data/out/ddv_orbis_uniquement.csv")
 
 # Bouton téléchargement
@@ -331,7 +345,10 @@ datatable(ddv_orbis, extensions = 'FixedColumns',
 ```{r}
 # Entreprises communes aux bases Sirene et Orbis
 ddv_sirene_orbis <- inner_join(unites_legales_ddv_sirene, entreprises_ddv_orbis, by = "SIREN") |> 
-    arrange(`Dénomination de l'unité légale`)
+    arrange(`Dénomination de l'unité légale`) |> 
+    left_join(orbis_a_ecarter, by = c("Nom de l'entreprise Latin alphabet" = "entreprise")) |> 
+    filter(is.na(non_soumises)) |> #si rien dans `non_soumises` alors entreprise OK
+    select(-non_soumises)
 rio::export(ddv_sirene_orbis, "data/out/ddv_sirene_orbis.csv")
 
 # Bouton téléchargement
@@ -385,11 +402,11 @@ ddv_sirene_orbis_full <- full_join(unites_legales_ddv_sirene |> mutate(Source = 
     select(Source, nom_entreprise, SIREN_Sirene, SIRET_Orbis, annee_effectifs_ul_Sirene, effectifs_unite_legale_Sirene, 
            annee_derniers_effectifs_Orbis:derniers_effectifs_moins2_Orbis, derniers_effectifs, forme_juridique_Sirene, annee_maj_forme_juridique_Orbis, 
            forme_juridique_Orbis, nombre_etablissements_Sirene) |> 
-    arrange(nom_entreprise)
+    arrange(nom_entreprise) |> 
+    left_join(orbis_a_ecarter, by = c("nom_entreprise" = "entreprise")) |> 
+    filter(is.na(non_soumises)) |> #si rien dans `non_soumises` alors entreprise OK
+    select(-non_soumises)
 rio::export(ddv_sirene_orbis_full, "data/out/ddv_sirene_orbis_full.csv")
-
-test <- ddv_sirene_orbis_full |> mutate(effectif_sup_10000 = ifelse(derniers_effectifs >= 10000, TRUE, FALSE))
-table(test$effectif_sup_10000)
 
 # Bouton téléchargement
 download_file(
@@ -415,7 +432,7 @@ datatable(ddv_sirene_orbis_full, extensions = 'FixedColumns',
 ```
 
 
-```{r eval=TRUE, include=FALSE}
+```{r eval=FALSE, include=FALSE}
 # EXtraits des données à vérifier manuellement
 entreprises_orbis_effectifs_5000a9999 <- entreprises_ddv_orbis |> filter(derniers_effectifs >= 5000 & derniers_effectifs < 10000)
 rio::export(entreprises_orbis_effectifs_5000a9999, "data/out/entreprises_orbis_effectifs_5000-a-9999.csv")
