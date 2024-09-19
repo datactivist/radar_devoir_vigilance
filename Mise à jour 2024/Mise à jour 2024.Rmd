@@ -52,7 +52,10 @@ library(tidyverse)
 library(readxl)
 
 # Données
+    # Sirene
 sirene <- read_csv("data/in/entreprises_plus5000-salaries_SIRENE.csv")
+    # Màj 2020 radar
+radar_2020 <- read_csv("data/in/Plans de vigilance publie_s en 2023 et 2024_liste_complete_def.csv")
 
 
 ##--- Filtres
@@ -224,7 +227,7 @@ div.blue { background-color:#efefef; border-radius: 5px; padding: 20px;}
 
 Les données Orbis ne précisent pas s'il s'agit des effectifs France ou dans le monde. Les entreprises ayant des effectifs compris entre 5000 et 9999 ont donc fait l'objet d'une vérification manuelle, pour savoir si le devoir de vigilance s'applique ou non. 
 
-Parmi les 129 entreprises concernées, 53 faisaient déjà partie de la liste du radar datant de 2020, 17 sont soumises au DDV, 45 ne le sont pas, et pour 14 d'entre elles aucune information n'a pu être trouvée. Ces 14 entreprises sont donc écartées de la liste.  
+Parmi les 129 entreprises concernées, 53 faisaient déjà partie de la liste du radar datant de 2020, 17 sont soumises au DDV, 45 ne le sont pas, et pour 14 d'entre elles aucune information n'a pu être trouvée. Ces 14 entreprises sont donc écartées de la liste, ainsi que les 45 entreprises qui après vérification ne semblent pas soumises au devoir de vigilance.  
 
 
 </div>
@@ -442,6 +445,128 @@ rio::export(entreprises_soumises_ddv_premiere_extraction, "data/out/entreprises_
 ```
 
 
+# Comparatif avec la dernière mise à jour de la liste (2020){.tabset}
+
+
+## Entreprises communes
+
+```{r}
+# Traitement des entreprises radar 2020
+radar_2020_traite <- radar_2020 |> 
+    select(1, 2) |> 
+    mutate(entreprise_upper = stringi::stri_trans_general(str = gsub("-", " ", toupper(Société)), id = "Latin-ASCII"),
+           SIREN = str_remove_all(SIREN, " "), #remove white space
+           SIREN = str_remove_all(SIREN, "\\.")) #remove points from string
+
+# Comparaison
+    # sur le numéro SIREN
+entps_communes_20_24 <- inner_join(ddv_sirene_orbis_full, radar_2020_traite, by = c("SIREN_Sirene" = "SIREN")) |> 
+    select(-c(Société, entreprise_upper))
+    # sur le nom d'entreprise pour celles qui n'ont pas de SIREN
+test2 <- inner_join(ddv_sirene_orbis_full, radar_2020_traite |> filter(is.na(SIREN)), by = c("nom_entreprise" = "entreprise_upper")) #0 entreprise
+rio::export(entps_communes_20_24, "data/out/entps_communes_20_24.csv")
+
+# Bouton téléchargement
+download_file(
+  path = "data/out/entps_communes_20_24.csv",
+  output_name = "entps_communes_2020_2024",
+  button_label = "Données",
+  has_icon = TRUE,
+  icon = "fa fa-download",
+  self_contained = FALSE,
+  class = "button")
+```
+
+
+`r nrow(entps_communes_20_24)` entreprises font partie de la liste d'entreprises soumises au devoir de vigilance mise à jour en 2024, ainsi que la version précédente datant de 2020. 
+
+<br>
+
+```{r}
+# Affichage des données
+datatable(entps_communes_20_24, extensions = 'FixedColumns', 
+          options = list(pageLength = 10, scrollX = TRUE, fixedColumns = list(leftColumns = 2)))
+```
+
+## Entreprises entrantes
+
+```{r}
+# Comparaison
+    # sur le numéro SIREN
+entps_entrantes_24 <- setdiff(ddv_sirene_orbis_full$SIREN_Sirene, radar_2020_traite$SIREN) |> 
+    as.data.frame() |> 
+    rename(SIREN_Sirene = 1) |> 
+    left_join(ddv_sirene_orbis_full, by = "SIREN_Sirene") |> 
+    relocate(SIREN_Sirene, .after = nom_entreprise)
+
+    # sur le nom d'entreprise pour celles qui n'ont pas de SIREN
+radar_na_siren <- radar_2020_traite |> filter(is.na(SIREN))
+test2 <- setdiff(ddv_sirene_orbis_full$nom_entreprise, radar_na_siren$entreprise_upper) |> 
+    as.data.frame() #0 entreprise
+rio::export(entps_entrantes_24, "data/out/entps_entrantes_24.csv")
+
+# Bouton téléchargement
+download_file(
+  path = "data/out/entps_entrantes_24.csv",
+  output_name = "entps_entrantes_2024",
+  button_label = "Données",
+  has_icon = TRUE,
+  icon = "fa fa-download",
+  self_contained = FALSE,
+  class = "button")
+```
+
+
+`r nrow(entps_entrantes_24)` entreprises ne faisaient pas partie de la liste d'entreprises soumises au devoir de vigilance datant de 2020, mais sont dans la mise à jour de 2024. 
+
+<br>
+
+```{r}
+# Affichage des données
+datatable(entps_entrantes_24, extensions = 'FixedColumns', 
+          options = list(pageLength = 10, scrollX = TRUE, fixedColumns = list(leftColumns = 2)))
+```
+
+
+
+
+## Entreprises sortantes
+
+```{r}
+# Comparaison
+    # sur le numéro SIREN
+entps_sortantes_20 <- setdiff(radar_2020_traite$SIREN, ddv_sirene_orbis_full$SIREN_Sirene) |> 
+    as.data.frame() |> 
+    rename(SIREN = 1) |> 
+    left_join(radar_2020_traite, by = "SIREN") |> 
+    select(-entreprise_upper) |> 
+    arrange(Société)
+    # sur le nom d'entreprise pour celles qui n'ont pas de SIREN
+test2 <- setdiff(radar_na_siren$entreprise_upper, ddv_sirene_orbis_full$nom_entreprise) |> 
+    as.data.frame() #9 entreprises déjà présentes dans entps_sortantes_20
+rio::export(entps_sortantes_20, "data/out/entps_sortantes_20.csv")
+
+# Bouton téléchargement
+download_file(
+  path = "data/out/entps_sortantes_20.csv",
+  output_name = "entps_sortantes_2020",
+  button_label = "Données",
+  has_icon = TRUE,
+  icon = "fa fa-download",
+  self_contained = FALSE,
+  class = "button")
+```
+
+
+`r nrow(entps_sortantes_20)` entreprises faisant partie de la liste d'entreprises soumises au devoir de vigilance datant de 2020, ne sont plus dans la mise à jour de 2024. 
+
+<br>
+
+```{r}
+# Affichage des données
+datatable(entps_sortantes_20, extensions = 'FixedColumns', 
+          options = list(pageLength = 10, scrollX = TRUE, fixedColumns = list(leftColumns = 2)))
+```
 
 
 
