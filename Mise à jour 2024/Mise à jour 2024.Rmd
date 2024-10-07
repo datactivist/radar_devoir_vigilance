@@ -223,12 +223,15 @@ div.blue { background-color:#efefef; border-radius: 5px; padding: 20px;}
 </style>
 <div class = "blue">
 
-**Vérification manuelle**
+**Vérifications manuelles**
 
-Les données Orbis ne précisent pas s'il s'agit des effectifs France ou dans le monde. Les entreprises ayant des effectifs compris entre 5000 et 9999 ont donc fait l'objet d'une vérification manuelle, pour savoir si le devoir de vigilance s'applique ou non. 
+Les données Orbis ne précisent pas s'il s'agit des effectifs France ou dans le monde. Les entreprises ayant des effectifs compris entre 5000 et 9999 ont donc fait l'objet d'une vérification manuelle, pour savoir si le devoir de vigilance s'applique ou non.
 
 Parmi les 129 entreprises concernées, 53 faisaient déjà partie de la liste du radar datant de 2020, 17 sont soumises au DDV, 45 ne le sont pas, et pour 14 d'entre elles aucune information n'a pu être trouvée. Ces 14 entreprises sont donc écartées de la liste, ainsi que les 45 entreprises qui après vérification ne semblent pas soumises au devoir de vigilance.  
 
+Une deuxième vérification a été menée pour écarter les entreprises dont les chiffres indiqués par Orbis ou SIRENE semblaient erronés. La vérification a été faite à partir des comptes publics, les entreprises suivantes ont ainsi été écartées : *Groupe Escharavil, SAMSIC 1, Kinougarde, Herbalife International France, Compagnie des Alpes, RAS, Start People et Synergie SE*.
+
+Enfin, les entreprises qui publient un plan (reconnaissant ainsi être soumises à la loi sur le devoir de vigilance) ont été ajoutées, de même que certaines autres sociétés à la suite de signalements par des tiers. Celles-ci apparaissent uniquement dans la "liste finale", avec la source "*Publie un plan*". 
 
 </div>
 
@@ -275,6 +278,7 @@ ggVennDiagram(table3, label_alpha = 0)
 ```{r}
 # Base Sirene uniquement
 ddv_sirene <- anti_join(unites_legales_ddv_sirene, entreprises_ddv_orbis, by = "SIREN") |> 
+    filter(`Dénomination de l'unité légale` %in% c("GROUPE ESCHARAVIL", "SAMSIC 1", "KINOUGARDE", "HERBALIFE INTERNATIONAL FRANCE", "COMPAGNIE DES ALPES", "RAS", "START PEOPLE", "SYNERGIE SE") == FALSE) |> 
     arrange(`Dénomination de l'unité légale`)
 rio::export(ddv_sirene, "data/out/ddv_sirene_uniquement.csv")
 
@@ -305,7 +309,7 @@ datatable(ddv_sirene, extensions = 'FixedColumns',
 
 
 ```{r}
-# Vérification manuelle des effectifs Orbis : entrperises à écarter
+# Vérification manuelle des effectifs Orbis : entreprises à écarter
 orbis_a_ecarter <- verif_manuelle_effectifs_orbis |> 
     filter(etat_recherche %in% c("information non trouvee", "non soumise DDV")) |> 
     select(entreprise) |> 
@@ -315,7 +319,8 @@ orbis_a_ecarter <- verif_manuelle_effectifs_orbis |>
 ddv_orbis <- anti_join(entreprises_ddv_orbis, unites_legales_ddv_sirene, by = "SIREN") |> 
     arrange(`Nom de l'entreprise Latin alphabet`) |> 
     left_join(orbis_a_ecarter, by = c("Nom de l'entreprise Latin alphabet" = "entreprise")) |> 
-    filter(is.na(non_soumises)) |> #si rien dans `non_soumises` alors entreprise OK
+    filter(is.na(non_soumises),  #si rien dans `non_soumises` alors entreprise OK
+           `Nom de l'entreprise Latin alphabet` %in% c("GROUPE ESCHARAVIL", "SAMSIC 1", "KINOUGARDE", "HERBALIFE INTERNATIONAL FRANCE", "COMPAGNIE DES ALPES", "RAS", "START PEOPLE", "SYNERGIE SE") == FALSE) |> 
     select(-non_soumises)
 rio::export(ddv_orbis, "data/out/ddv_orbis_uniquement.csv")
 
@@ -350,7 +355,9 @@ datatable(ddv_orbis, extensions = 'FixedColumns',
 ddv_sirene_orbis <- inner_join(unites_legales_ddv_sirene, entreprises_ddv_orbis, by = "SIREN") |> 
     arrange(`Dénomination de l'unité légale`) |> 
     left_join(orbis_a_ecarter, by = c("Nom de l'entreprise Latin alphabet" = "entreprise")) |> 
-    filter(is.na(non_soumises)) |> #si rien dans `non_soumises` alors entreprise OK
+    filter(is.na(non_soumises), #si rien dans `non_soumises` alors entreprise OK
+           `Nom de l'entreprise Latin alphabet` %in% c("GROUPE ESCHARAVIL", "SAMSIC 1", "KINOUGARDE", "HERBALIFE INTERNATIONAL FRANCE", "COMPAGNIE DES ALPES", "RAS", "START PEOPLE", "SYNERGIE SE") == FALSE,
+           `Dénomination de l'unité légale` %in% c("GROUPE ESCHARAVIL", "SAMSIC 1", "KINOUGARDE", "HERBALIFE INTERNATIONAL FRANCE", "COMPAGNIE DES ALPES", "RAS", "START PEOPLE", "SYNERGIE SE") == FALSE) |> 
     select(-non_soumises)
 rio::export(ddv_sirene_orbis, "data/out/ddv_sirene_orbis.csv")
 
@@ -379,6 +386,9 @@ datatable(ddv_sirene_orbis, extensions = 'FixedColumns',
 
 
 ```{r}
+# Import données entreprises reconnaissant être soumises au DDV
+entps_reconnaissant_etre_soumises_DDV <- read_csv("data/in/entps_sortantes_20-soumises-DDV.csv")
+
 library(tm)
 # Entreprises communes aux bases Sirene et Orbis
 ddv_sirene_orbis_full <- full_join(unites_legales_ddv_sirene |> mutate(Source = "Sirene"), 
@@ -389,7 +399,7 @@ ddv_sirene_orbis_full <- full_join(unites_legales_ddv_sirene |> mutate(Source = 
                               Source_Orbis == "Orbis" & is.na(Source_Sirene) ~ "Orbis",
                               .default = NA_character_),
            nom_entreprise = coalesce(`Dénomination de l'unité légale`, `Nom de l'entreprise Latin alphabet`),
-           SIRET_Orbis = removeWords(`Code d'identifiant`, "-"),
+           SIRET = removeWords(`Code d'identifiant`, "-"),
            annee_maj_forme_juridique_Orbis = na_if(`Dernière mise à jour - Statut...`, "")) |> 
     select(-c(Source_Sirene, Source_Orbis, `Dénomination de l'unité légale`, `Nom de l'entreprise Latin alphabet`)) |> 
     rename(effectifs_unite_legale_Sirene = `Tranche de l'effectif de l'unité légale`,
@@ -400,15 +410,18 @@ ddv_sirene_orbis_full <- full_join(unites_legales_ddv_sirene |> mutate(Source = 
            derniers_effectifs_moins2_Orbis = `EffectifsAnnée - 2`,
            forme_juridique_Sirene = `Nature juridique de l'unité légale`,
            forme_juridique_Orbis = `Statut juridique standardisé`,
-           SIREN_Sirene = SIREN,
            nombre_etablissements_Sirene = nombre_etablissements) |> 
-    select(Source, nom_entreprise, SIREN_Sirene, SIRET_Orbis, annee_effectifs_ul_Sirene, effectifs_unite_legale_Sirene, 
+    select(Source, nom_entreprise, SIREN, SIRET, annee_effectifs_ul_Sirene, effectifs_unite_legale_Sirene, 
            annee_derniers_effectifs_Orbis:derniers_effectifs_moins2_Orbis, derniers_effectifs, forme_juridique_Sirene, annee_maj_forme_juridique_Orbis, 
            forme_juridique_Orbis, nombre_etablissements_Sirene) |> 
     arrange(nom_entreprise) |> 
     left_join(orbis_a_ecarter, by = c("nom_entreprise" = "entreprise")) |> 
-    filter(is.na(non_soumises)) |> #si rien dans `non_soumises` alors entreprise OK
-    select(-non_soumises)
+    filter(is.na(non_soumises),  #si rien dans `non_soumises` alors entreprise OK
+           nom_entreprise %in% c("GROUPE ESCHARAVIL", "SAMSIC 1", "KINOUGARDE", "HERBALIFE INTERNATIONAL FRANCE", "COMPAGNIE DES ALPES", "RAS", "START PEOPLE", "SYNERGIE SE") == FALSE) |>
+    select(-non_soumises) |> 
+    # Ajout des entreprises qui reconnaissent être soumises au DDV
+    rbind(entps_reconnaissant_etre_soumises_DDV) |> 
+    arrange(nom_entreprise)
 rio::export(ddv_sirene_orbis_full, "data/out/ddv_sirene_orbis_full.csv")
 
 # Bouton téléchargement
@@ -445,12 +458,14 @@ rio::export(entreprises_soumises_ddv_premiere_extraction, "data/out/entreprises_
 ```
 
 
+
+```{r eval=FALSE, include=FALSE}
 # Comparatif avec la dernière mise à jour de la liste (2020){.tabset}
 
 
 ## Entreprises communes
 
-```{r}
+
 # Traitement des entreprises radar 2020
 radar_2020_traite <- radar_2020 |> 
     select(1, 2) |> 
@@ -475,22 +490,18 @@ download_file(
   icon = "fa fa-download",
   self_contained = FALSE,
   class = "button")
-```
 
 
 `r nrow(entps_communes_20_24)` entreprises font partie de la liste d'entreprises soumises au devoir de vigilance mise à jour en 2024, ainsi que la version précédente datant de 2020. 
 
 <br>
 
-```{r}
 # Affichage des données
 datatable(entps_communes_20_24, extensions = 'FixedColumns', 
           options = list(pageLength = 10, scrollX = TRUE, fixedColumns = list(leftColumns = 2)))
-```
 
 ## Entreprises entrantes
 
-```{r}
 # Comparaison
     # sur le numéro SIREN
 entps_entrantes_24 <- setdiff(ddv_sirene_orbis_full$SIREN_Sirene, radar_2020_traite$SIREN) |> 
@@ -514,25 +525,21 @@ download_file(
   icon = "fa fa-download",
   self_contained = FALSE,
   class = "button")
-```
 
 
 `r nrow(entps_entrantes_24)` entreprises ne faisaient pas partie de la liste d'entreprises soumises au devoir de vigilance datant de 2020, mais sont dans la mise à jour de 2024. 
 
 <br>
 
-```{r}
 # Affichage des données
 datatable(entps_entrantes_24, extensions = 'FixedColumns', 
           options = list(pageLength = 10, scrollX = TRUE, fixedColumns = list(leftColumns = 2)))
-```
 
 
 
 
 ## Entreprises sortantes
 
-```{r}
 # Comparaison
     # sur le numéro SIREN
 entps_sortantes_20 <- setdiff(radar_2020_traite$SIREN, ddv_sirene_orbis_full$SIREN_Sirene) |> 
@@ -555,14 +562,12 @@ download_file(
   icon = "fa fa-download",
   self_contained = FALSE,
   class = "button")
-```
 
 
 `r nrow(entps_sortantes_20)` entreprises faisant partie de la liste d'entreprises soumises au devoir de vigilance datant de 2020, ne sont plus dans la mise à jour de 2024. 
 
 <br>
 
-```{r}
 # Affichage des données
 datatable(entps_sortantes_20, extensions = 'FixedColumns', 
           options = list(pageLength = 10, scrollX = TRUE, fixedColumns = list(leftColumns = 2)))
