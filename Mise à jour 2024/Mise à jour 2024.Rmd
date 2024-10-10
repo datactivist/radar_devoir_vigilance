@@ -387,7 +387,7 @@ datatable(ddv_sirene_orbis, extensions = 'FixedColumns',
 
 ```{r}
 # Import données entreprises reconnaissant être soumises au DDV
-entps_reconnaissant_etre_soumises_DDV <- read_csv("data/in/entps_sortantes_20-soumises-DDV.csv")
+entps_CCFD_sherpa <- read_csv("data/in/entps_CCFD-Sherpa.csv")
 
 library(tm)
 # Entreprises communes aux bases Sirene et Orbis
@@ -421,7 +421,7 @@ ddv_sirene_orbis_full <- full_join(unites_legales_ddv_sirene |> mutate(Source = 
     select(-non_soumises) |> 
     # Ajout des entreprises qui reconnaissent être soumises au DDV
     mutate(`forme_juridique_CCFD-Sherpa` = NA) |> 
-    rbind(entps_reconnaissant_etre_soumises_DDV) |> 
+    rbind(entps_CCFD_sherpa) |> 
     mutate(nom_entreprise = toupper(nom_entreprise)) |> 
     arrange(nom_entreprise)
 rio::export(ddv_sirene_orbis_full, "data/out/ddv_sirene_orbis_full.csv")
