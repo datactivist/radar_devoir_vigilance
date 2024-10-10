@@ -231,7 +231,7 @@ Parmi les 129 entreprises concernées, 53 faisaient déjà partie de la liste du
 
 Une deuxième vérification a été menée pour écarter les entreprises dont les chiffres indiqués par Orbis ou SIRENE semblaient erronés. La vérification a été faite à partir des comptes publics, les entreprises suivantes ont ainsi été écartées : *Groupe Escharavil, SAMSIC 1, Kinougarde, Herbalife International France, Compagnie des Alpes, RAS, Start People et Synergie SE*.
 
-Enfin, les entreprises qui publient un plan (reconnaissant ainsi être soumises à la loi sur le devoir de vigilance) ont été ajoutées, de même que certaines autres sociétés à la suite de signalements par des tiers. Celles-ci apparaissent uniquement dans la "liste finale", avec la source "*Publie un plan*". 
+Enfin, les entreprises qui publient un plan (reconnaissant ainsi être soumises à la loi sur le devoir de vigilance) ont été ajoutées, de même que certaines autres sociétés à la suite de signalements par des tiers. Celles-ci apparaissent uniquement dans la "liste finale", avec la source "*CCFD-Sherpa*". 
 
 </div>
 
@@ -420,7 +420,9 @@ ddv_sirene_orbis_full <- full_join(unites_legales_ddv_sirene |> mutate(Source = 
            nom_entreprise %in% c("GROUPE ESCHARAVIL", "SAMSIC 1", "KINOUGARDE", "HERBALIFE INTERNATIONAL FRANCE", "COMPAGNIE DES ALPES", "RAS", "START PEOPLE", "SYNERGIE SE") == FALSE) |>
     select(-non_soumises) |> 
     # Ajout des entreprises qui reconnaissent être soumises au DDV
+    mutate(`forme_juridique_CCFD-Sherpa` = NA) |> 
     rbind(entps_reconnaissant_etre_soumises_DDV) |> 
+    mutate(nom_entreprise = toupper(nom_entreprise)) |> 
     arrange(nom_entreprise)
 rio::export(ddv_sirene_orbis_full, "data/out/ddv_sirene_orbis_full.csv")
 
